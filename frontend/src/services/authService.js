@@ -93,6 +93,25 @@ export const authService = {
     });
   },
 
+  async uploadAvatar(profilePictureData) {
+    if (isMockMode()) {
+      return { profilePicture: profilePictureData };
+    }
+    return apiRequest('/auth/avatar', {
+      method: 'POST',
+      body: { profilePicture: profilePictureData }
+    });
+  },
+
+  async deleteAvatar() {
+    if (isMockMode()) {
+      return { message: 'Profile picture removed successfully' };
+    }
+    return apiRequest('/auth/avatar', {
+      method: 'DELETE'
+    });
+  },
+
   logout() {
     setAuthToken(null);
   }

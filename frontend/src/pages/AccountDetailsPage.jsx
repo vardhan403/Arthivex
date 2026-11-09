@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { accountService } from '../services/accountService';
 import { transactionService } from '../services/transactionService';
 import { formatCurrency } from '../utils/currencyFormatter';
+import { exportTransactionsCsv } from '../utils/csvGenerator';
+import { generateTransactionStatementPdf } from '../utils/pdfGenerator';
 
 export default function AccountDetailsPage() {
+  const { user } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -61,29 +65,30 @@ export default function AccountDetailsPage() {
     }
   };
 
-  const handleExportStatement = () => {
+  const handleExportCsv = () => {
     if (!transactions || transactions.length === 0) {
       alert('No ledger transactions available to export for this account.');
       return;
     }
-    const headers = ['Transaction ID', 'Date', 'Description', 'Method', 'Amount', 'Status'];
-    const rows = transactions.map((t) => [
-      t.id,
-      `"${t.date}"`,
-      `"${(t.counterparty || '').replace(/"/g, '""')}"`,
-      `"${t.method}"`,
-      `"${t.amount}"`,
-      t.status
-    ]);
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `arthivex_account_${id}_statement.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportTransactionsCsv(transactions, {
+      filename: `arthivex_account_${account?.accountNumber || id}_statement.csv`,
+      accountName: account?.name || 'Vault Account',
+      currency: account?.currency || 'INR'
+    });
+  };
+
+  const handleExportPdf = () => {
+    if (!transactions || transactions.length === 0) {
+      alert('No ledger transactions available to export for this account.');
+      return;
+    }
+    generateTransactionStatementPdf({
+      user,
+      account,
+      transactions,
+      dateRange: 'Complete Statement',
+      currency: account?.currency || 'INR'
+    });
   };
 
   const filteredTransactions = transactions.filter((tx) => {
@@ -163,11 +168,21 @@ export default function AccountDetailsPage() {
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
-            onClick={handleExportStatement}
+            onClick={handleExportCsv}
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#161b29] hover:bg-[#1a1f2d] text-[#dee2f5] border border-[#283046] text-xs font-semibold transition-all shadow-sm cursor-pointer"
+            title="Download RFC-4180 CSV Spreadsheet"
           >
-            <span className="material-symbols-outlined text-[17px] text-[#bfc6de]">download</span>
-            <span>Export CSV Ledger</span>
+            <span className="material-symbols-outlined text-[17px] text-[#ffb067]">table_view</span>
+            <span>Export CSV</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#161b29] hover:bg-[#1a1f2d] text-[#dee2f5] border border-[#283046] text-xs font-semibold transition-all shadow-sm cursor-pointer"
+            title="Download Certified PDF Statement"
+          >
+            <span className="material-symbols-outlined text-[17px] text-[#ffb067]">picture_as_pdf</span>
+            <span>Export PDF</span>
           </button>
           <button
             type="button"

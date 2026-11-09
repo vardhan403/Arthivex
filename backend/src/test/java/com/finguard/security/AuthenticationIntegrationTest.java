@@ -27,6 +27,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -256,6 +257,59 @@ class AuthenticationIntegrationTest {
                         .header("Authorization", "Bearer " + previouslyIssuedToken))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error", is("UNAUTHORIZED")));
+    }
+
+    @Test
+    @DisplayName("AUTH-11: Authenticated user can upload, retrieve, and delete profile picture")
+    void profilePictureLifecycleSucceeds() throws Exception {
+        User user = new User("Ada Lovelace", "ada.avatar@arthivex.io", passwordEncoder.encode("SecurePass123!"), Role.ACCOUNT_HOLDER);
+        userRepository.save(user);
+
+        String token = jwtService.generateToken(user);
+        String validAvatarData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+        // 1. Update avatar via JSON
+        mockMvc.perform(post("/api/v1/auth/avatar")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"profilePicture\":\"" + validAvatarData + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.profilePicture", is(validAvatarData)));
+
+        // 2. Verify /api/v1/auth/me returns persisted avatar
+        mockMvc.perform(get("/api/v1/auth/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.profilePicture", is(validAvatarData)));
+
+        // 3. Remove avatar
+        mockMvc.perform(delete("/api/v1/auth/avatar")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.profilePicture").doesNotExist());
+
+        // 4. Verify /api/v1/auth/me reflects removal
+        mockMvc.perform(get("/api/v1/auth/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.profilePicture").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("AUTH-12: Invalid avatar image format is rejected with 400 Bad Request")
+    void invalidAvatarFormatIsRejected() throws Exception {
+        User user = new User("Alan Turing", "alan.avatar@arthivex.io", passwordEncoder.encode("SecurePass123!"), Role.ACCOUNT_HOLDER);
+        userRepository.save(user);
+
+        String token = jwtService.generateToken(user);
+
+        // Disallowed mime format (e.g. text/html script injection)
+        mockMvc.perform(post("/api/v1/auth/avatar")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"profilePicture\":\"data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("INVALID_ARGUMENT")));
     }
 }
 

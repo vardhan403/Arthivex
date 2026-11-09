@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { accountService } from '../services/accountService';
 import { transactionService } from '../services/transactionService';
 import { formatCurrency, getCurrencySymbol } from '../utils/currencyFormatter';
+import { exportTransactionsCsv } from '../utils/csvGenerator';
+import { generateTransactionStatementPdf } from '../utils/pdfGenerator';
 
 // Helper for strict monetary arithmetic avoiding floating-point inaccuracies
 const parseCents = (val) => {
@@ -31,6 +33,10 @@ export default function DashboardPage() {
 
   // Modal State
   const [selectedTxn, setSelectedTxn] = useState(null);
+
+  // Interactive Chart States
+  const [hoveredBucketIndex, setHoveredBucketIndex] = useState(null);
+  const [hoveredSlice, setHoveredSlice] = useState(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -88,33 +94,35 @@ export default function DashboardPage() {
   };
 
   // CSV Statement Exporter
-  const handleExportStatement = (txList, filename = 'arthivex_ledger_statement.csv') => {
+  const handleExportCsv = (txList = transactions, filename = 'arthivex_ledger_statement.csv') => {
     if (!txList || txList.length === 0) {
       alert('No transactions available to export for the selected range.');
       return;
     }
     const defaultCurrency = accounts[0]?.currency || 'INR';
-    const headers = ['Transaction ID', 'Reference', 'Type', 'Description', `Amount (${defaultCurrency})`, 'Currency', 'Status', 'Date'];
-    const rows = txList.map((t) => [
-      t.id,
-      t.reference || t.id,
-      t.type,
-      `"${(t.party || '').replace(/"/g, '""')}"`,
-      t.numericAmount,
-      t.currency || defaultCurrency,
-      t.status,
-      `"${t.time}"`
-    ]);
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportTransactionsCsv(txList, {
+      filename,
+      currency: defaultCurrency
+    });
   };
+
+  // Certified PDF Statement Exporter
+  const handleExportPdf = (txList = transactions) => {
+    if (!txList || txList.length === 0) {
+      alert('No transactions available to export for the selected range.');
+      return;
+    }
+    const defaultCurrency = accounts[0]?.currency || 'INR';
+    generateTransactionStatementPdf({
+      user,
+      transactions: txList,
+      dateRange: `${chartRange.toUpperCase()} Summary`,
+      currency: defaultCurrency
+    });
+  };
+
+  // Legacy alias for existing invocations
+  const handleExportStatement = (txList, filename) => handleExportCsv(txList, filename);
 
   // Transaction Receipt Exporter
   const handleDownloadTxnReceipt = (txn) => {
@@ -213,9 +221,13 @@ Double-Entry Status: BALANCED
     buckets.push({
       index: i,
       label,
+      startDate: bStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      endDate: bEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       inflowCents: bInflows,
       outflowCents: bOutflows,
-      cumulativeNetCents
+      netCents: bInflows - bOutflows,
+      cumulativeNetCents,
+      txnCount: bTxns.length
     });
   }
 
@@ -352,9 +364,22 @@ Double-Entry Status: BALANCED
                       Double-Entry Ledger Architecture
                     </span>
                   </div>
-                  <h1 className="text-2xl sm:text-3xl xl:text-[32px] font-bold text-slate-900 dark:text-white tracking-tight leading-snug">
-                    Welcome back, {displayName}
-                  </h1>
+                  <div className="flex items-center gap-3.5 my-1">
+                    {user?.profilePicture ? (
+                      <img
+                        src={user.profilePicture}
+                        alt={displayName}
+                        className="w-12 h-12 rounded-full object-cover ring-2 ring-[#ffb067]/50 shadow-md shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-[#ffb067]/20 border border-[#ffb067]/40 flex items-center justify-center text-[#ffb067] font-bold text-lg shrink-0">
+                        {displayName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <h1 className="text-2xl sm:text-3xl xl:text-[32px] font-bold text-slate-900 dark:text-white tracking-tight leading-snug">
+                      Welcome back, {displayName}
+                    </h1>
+                  </div>
                   <p className="text-sm text-slate-600 dark:text-slate-300/80 leading-relaxed max-w-2xl">
                     Enterprise Treasury & Liquidity Overview. Real-time settled positions and immutable double-entry ledger accounts.
                   </p>
@@ -420,15 +445,27 @@ Double-Entry Status: BALANCED
                   </button>
 
                   <button
-                    onClick={() => handleExportStatement(transactions, 'arthivex_settlement_ledger.csv')}
-                    className="inline-flex items-center justify-center gap-2 px-3.5 h-10 rounded-xl bg-white hover:bg-slate-50 text-slate-800 hover:text-slate-900 border border-slate-300 hover:border-slate-400 dark:bg-[#0e1320]/90 dark:hover:bg-[#20273a] dark:text-slate-200 dark:hover:text-white dark:border-[#283046] dark:hover:border-slate-500 transition-all text-xs font-semibold active:scale-[0.98] group shadow-sm col-span-2 sm:col-span-1 cursor-pointer"
-                    title="Export Settlement Ledger Statement"
+                    onClick={() => handleExportPdf(transactions)}
+                    className="inline-flex items-center justify-center gap-2 px-3.5 h-10 rounded-xl bg-white hover:bg-slate-50 text-slate-800 hover:text-slate-900 border border-slate-300 hover:border-slate-400 dark:bg-[#0e1320]/90 dark:hover:bg-[#20273a] dark:text-slate-200 dark:hover:text-white dark:border-[#283046] dark:hover:border-slate-500 transition-all text-xs font-semibold active:scale-[0.98] group shadow-sm cursor-pointer"
+                    title="Export Certified PDF Statement"
                     type="button"
                   >
                     <span className="material-symbols-outlined text-[18px] text-slate-500 dark:text-slate-400 group-hover:text-amber-600 dark:group-hover:text-[#ffb067] transition-colors">
-                      download
+                      picture_as_pdf
                     </span>
-                    <span>Export Statement</span>
+                    <span>Export PDF</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleExportCsv(transactions, 'arthivex_settlement_ledger.csv')}
+                    className="inline-flex items-center justify-center gap-2 px-3.5 h-10 rounded-xl bg-white hover:bg-slate-50 text-slate-800 hover:text-slate-900 border border-slate-300 hover:border-slate-400 dark:bg-[#0e1320]/90 dark:hover:bg-[#20273a] dark:text-slate-200 dark:hover:text-white dark:border-[#283046] dark:hover:border-slate-500 transition-all text-xs font-semibold active:scale-[0.98] group shadow-sm cursor-pointer"
+                    title="Export Settlement Ledger CSV"
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-slate-500 dark:text-slate-400 group-hover:text-amber-600 dark:group-hover:text-[#ffb067] transition-colors">
+                      table_view
+                    </span>
+                    <span>Export CSV</span>
                   </button>
                 </div>
               </div>
@@ -682,24 +719,70 @@ Double-Entry Status: BALANCED
                       {formatCurrency(Math.round(maxVolumeCents * 0.25) / 100, primaryCurrency)}
                     </text>
 
-                    {/* Dynamic Volume Bars */}
+                    {/* Dynamic Volume Bars & Column Highlights */}
                     {buckets.map((b, i) => {
                       const xInflow = 75 + i * 110;
                       const xOutflow = xInflow + 17;
+                      const isHovered = hoveredBucketIndex === i;
                       const inflowH = b.inflowCents > 0 ? Math.max(4, Math.round((b.inflowCents / maxVolumeCents) * 150)) : 0;
                       const outflowH = b.outflowCents > 0 ? Math.max(4, Math.round((b.outflowCents / maxVolumeCents) * 150)) : 0;
 
                       return (
                         <g key={b.index}>
+                          {/* Translucent Column Highlight on Hover */}
+                          {isHovered && (
+                            <rect
+                              x={xInflow - 10}
+                              y={15}
+                              width={52}
+                              height={178}
+                              rx={6}
+                              fill="rgba(255, 176, 103, 0.08)"
+                              stroke="rgba(255, 176, 103, 0.35)"
+                              strokeDasharray="3 3"
+                            />
+                          )}
+
                           {inflowH > 0 && (
-                            <rect className="fill-[#ffb067]" height={inflowH} rx="3" width="14" x={xInflow} y={190 - inflowH} />
+                            <rect
+                              className={isHovered ? 'fill-[#ffa048]' : 'fill-[#ffb067]'}
+                              height={inflowH}
+                              rx="3"
+                              width="14"
+                              x={xInflow}
+                              y={190 - inflowH}
+                            />
                           )}
                           {outflowH > 0 && (
-                            <rect className="fill-[#283046]" height={outflowH} rx="3" width="14" x={xOutflow} y={190 - outflowH} />
+                            <rect
+                              className={isHovered ? 'fill-[#475569]' : 'fill-[#283046]'}
+                              height={outflowH}
+                              rx="3"
+                              width="14"
+                              x={xOutflow}
+                              y={190 - outflowH}
+                            />
                           )}
-                          <text className="text-[11px] fill-slate-400 font-mono" x={xInflow} y="210">
+                          <text
+                            className={`text-[11px] font-mono ${isHovered ? 'fill-[#ffb067] font-bold' : 'fill-slate-400'}`}
+                            x={xInflow}
+                            y={210}
+                          >
                             {b.label}
                           </text>
+
+                          {/* Invisible Column Hitbox for Mouse & Touch */}
+                          <rect
+                            x={xInflow - 12}
+                            y={10}
+                            width={56}
+                            height={205}
+                            fill="transparent"
+                            className="cursor-pointer"
+                            onMouseEnter={() => setHoveredBucketIndex(i)}
+                            onMouseLeave={() => setHoveredBucketIndex(null)}
+                            onTouchStart={() => setHoveredBucketIndex(i)}
+                          />
                         </g>
                       );
                     })}
@@ -724,19 +807,95 @@ Double-Entry Status: BALANCED
                     {buckets.map((b, i) => {
                       const x = 75 + i * 110 + 15.5;
                       const y = 175 - Math.round(((b.cumulativeNetCents - minCum) / cumSpan) * 120);
+                      const isHovered = hoveredBucketIndex === i;
                       const isLast = i === buckets.length - 1;
                       return (
                         <circle
                           key={`c-${i}`}
-                          className={isLast ? 'fill-[#ffb067] stroke-[#0e1320]' : 'fill-[#0e1320] stroke-emerald-400'}
+                          className={
+                            isHovered
+                              ? 'fill-[#ffb067] stroke-white'
+                              : isLast
+                              ? 'fill-[#ffb067] stroke-[#0e1320]'
+                              : 'fill-[#0e1320] stroke-emerald-400'
+                          }
                           cx={x}
                           cy={y}
-                          r={isLast ? 5 : 4}
-                          strokeWidth="2"
+                          r={isHovered ? 7 : isLast ? 5 : 4}
+                          strokeWidth={isHovered ? 2.5 : 2}
                         ></circle>
                       );
                     })}
+
+                    {/* In-Chart Floating SVG Tooltip */}
+                    {hoveredBucketIndex !== null && (() => {
+                      const hb = buckets[hoveredBucketIndex];
+                      const ttX = Math.min(530, Math.max(45, 75 + hoveredBucketIndex * 110 - 70));
+                      const ttY = 16;
+                      return (
+                        <g className="pointer-events-none transition-all duration-150">
+                          {/* Tooltip Card Container */}
+                          <rect
+                            x={ttX}
+                            y={ttY}
+                            width={195}
+                            height={92}
+                            rx={8}
+                            fill="#141a29"
+                            stroke="#ffb067"
+                            strokeWidth="1.2"
+                            filter="drop-shadow(0 6px 12px rgba(0,0,0,0.45))"
+                          />
+                          {/* Tooltip Header */}
+                          <text x={ttX + 12} y={ttY + 18} className="text-[11px] fill-white font-bold font-mono">
+                            {hb.label} ({hb.startDate} – {hb.endDate})
+                          </text>
+                          <line x1={ttX + 10} y1={ttY + 24} x2={ttX + 185} y2={ttY + 24} stroke="#283046" strokeWidth="1" />
+                          {/* Inflows */}
+                          <text x={ttX + 12} y={ttY + 38} className="text-[10px] fill-[#ffb067] font-mono">
+                            ● Inflows: +{formatCurrency(hb.inflowCents / 100, primaryCurrency)}
+                          </text>
+                          {/* Outflows */}
+                          <text x={ttX + 12} y={ttY + 52} className="text-[10px] fill-[#f87171] font-mono">
+                            ● Outflows: -{formatCurrency(hb.outflowCents / 100, primaryCurrency)}
+                          </text>
+                          {/* Net Delta */}
+                          <text x={ttX + 12} y={ttY + 66} className={`text-[10px] font-mono ${hb.netCents >= 0 ? 'fill-emerald-400' : 'fill-red-400'}`}>
+                            ● Net: {hb.netCents >= 0 ? '+' : ''}{formatCurrency(hb.netCents / 100, primaryCurrency)}
+                          </text>
+                          {/* Cumulative Reserves */}
+                          <text x={ttX + 12} y={ttY + 80} className="text-[10px] fill-slate-300 font-mono">
+                            ● Reserves: {formatCurrency(hb.cumulativeNetCents / 100, primaryCurrency)}
+                          </text>
+                        </g>
+                      );
+                    })()}
                   </svg>
+                )}
+
+                {/* Granular Inspection Ribbon below Chart */}
+                {hasChartActivity && (
+                  <div className="mt-3 p-2.5 rounded-xl bg-[#141a29] border border-[#283046] flex flex-wrap items-center justify-between gap-3 text-xs">
+                    {hoveredBucketIndex !== null ? (
+                      <div className="flex flex-wrap items-center gap-4 text-slate-300 font-mono">
+                        <span className="text-white font-bold flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#ffb067] animate-pulse"></span>
+                          {buckets[hoveredBucketIndex].label} ({buckets[hoveredBucketIndex].startDate} – {buckets[hoveredBucketIndex].endDate})
+                        </span>
+                        <span className="text-[#ffb067]">In: +{formatCurrency(buckets[hoveredBucketIndex].inflowCents / 100, primaryCurrency)}</span>
+                        <span className="text-red-400">Out: -{formatCurrency(buckets[hoveredBucketIndex].outflowCents / 100, primaryCurrency)}</span>
+                        <span className={buckets[hoveredBucketIndex].netCents >= 0 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                          Net: {buckets[hoveredBucketIndex].netCents >= 0 ? '+' : ''}{formatCurrency(buckets[hoveredBucketIndex].netCents / 100, primaryCurrency)}
+                        </span>
+                        <span className="text-slate-400">Cumulative: {formatCurrency(buckets[hoveredBucketIndex].cumulativeNetCents / 100, primaryCurrency)}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-slate-400 text-xs">
+                        <span className="material-symbols-outlined text-[16px] text-[#ffb067]">touch_app</span>
+                        <span>Hover or tap any column interval to inspect detailed cash inflows, disbursements, and net reserves.</span>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -749,7 +908,7 @@ Double-Entry Status: BALANCED
                   net {rangeNetTotal >= 0 ? 'positive inflow' : 'negative outflow'}.
                 </span>
                 <button
-                  onClick={() => handleExportStatement(rangeTxns.length > 0 ? rangeTxns : transactions, `arthivex_${chartRange}_ledger.csv`)}
+                  onClick={() => handleExportCsv(rangeTxns.length > 0 ? rangeTxns : transactions, `arthivex_${chartRange}_ledger.csv`)}
                   className="flex items-center gap-1 text-[#ffb067] text-xs font-semibold cursor-pointer hover:underline bg-transparent border-none p-0"
                   type="button"
                 >
@@ -768,7 +927,7 @@ Double-Entry Status: BALANCED
                 </span>
               </div>
 
-              {/* Dynamic Donut */}
+              {/* Dynamic Interactive Donut */}
               <div className="flex items-center justify-center py-2 relative">
                 <svg className="w-40 h-40 transform -rotate-90" viewBox="0 0 36 36">
                   <path
@@ -783,47 +942,86 @@ Double-Entry Status: BALANCED
                       const priorPct = allocationGroups
                         .slice(0, idx)
                         .reduce((sum, g) => sum + g.pct, 0);
+                      const isHovered = hoveredSlice === group.type;
                       return (
                         <path
                           key={group.type}
                           d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                           fill="none"
                           stroke={group.color}
-                          strokeWidth="4.5"
+                          strokeWidth={isHovered ? 6 : 4.5}
                           strokeDasharray={`${group.pct.toFixed(2)}, 100`}
                           strokeDashoffset={-priorPct.toFixed(2)}
+                          className="cursor-pointer transition-all duration-200"
+                          onMouseEnter={() => setHoveredSlice(group.type)}
+                          onMouseLeave={() => setHoveredSlice(null)}
+                          onClick={() => setHoveredSlice(hoveredSlice === group.type ? null : group.type)}
                         ></path>
                       );
                     })}
                 </svg>
 
-                <div className="absolute flex flex-col items-center justify-center">
-                  <span className="text-[10px] uppercase text-slate-400 font-semibold tracking-wider font-mono">
-                    Allocated
-                  </span>
-                  <span className="text-xl font-bold text-white font-mono">
-                    {formatCurrency(totalBalanceCents / 100, primaryCurrency)}
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-medium font-mono">
-                    {totalBalanceCents > 0 ? 'Balanced' : '0 Accounts'}
-                  </span>
+                <div className="absolute flex flex-col items-center justify-center pointer-events-none text-center px-2">
+                  {hoveredSlice && allocationGroups.find((g) => g.type === hoveredSlice) ? (
+                    (() => {
+                      const sel = allocationGroups.find((g) => g.type === hoveredSlice);
+                      return (
+                        <>
+                          <span className="text-[10px] uppercase text-[#ffb067] font-semibold tracking-wider font-mono truncate max-w-[100px]">
+                            {sel.label}
+                          </span>
+                          <span className="text-base font-bold text-white font-mono">
+                            {formatCurrency(sel.cents / 100, primaryCurrency)}
+                          </span>
+                          <span className="text-[10px] text-emerald-400 font-medium font-mono">
+                            {sel.pct.toFixed(1)}% Share
+                          </span>
+                        </>
+                      );
+                    })()
+                  ) : (
+                    <>
+                      <span className="text-[10px] uppercase text-slate-400 font-semibold tracking-wider font-mono">
+                        Allocated
+                      </span>
+                      <span className="text-xl font-bold text-white font-mono">
+                        {formatCurrency(totalBalanceCents / 100, primaryCurrency)}
+                      </span>
+                      <span className="text-[10px] text-emerald-400 font-medium font-mono">
+                        {totalBalanceCents > 0 ? 'Balanced' : '0 Accounts'}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* Dynamic Allocation Legend */}
-              <div className="flex flex-col gap-2.5 pt-2">
+              {/* Dynamic Allocation Legend with Hover & Click Highlighting */}
+              <div className="flex flex-col gap-2 pt-2">
                 {allocationGroups.length > 0 ? (
-                  allocationGroups.map((group) => (
-                    <div key={group.type} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: group.color }}></span>
-                        <span className="text-slate-300">
-                          {group.label} ({group.pct.toFixed(1)}%)
-                        </span>
+                  allocationGroups.map((group) => {
+                    const isHovered = hoveredSlice === group.type;
+                    return (
+                      <div
+                        key={group.type}
+                        onMouseEnter={() => setHoveredSlice(group.type)}
+                        onMouseLeave={() => setHoveredSlice(null)}
+                        onClick={() => setHoveredSlice(hoveredSlice === group.type ? null : group.type)}
+                        className={`flex items-center justify-between text-xs p-1.5 rounded-lg cursor-pointer transition-all ${
+                          isHovered
+                            ? 'bg-[#20273a] ring-1 ring-[#ffb067]/50 text-white shadow-sm'
+                            : 'hover:bg-[#1a1f2d] text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: group.color }}></span>
+                          <span className={isHovered ? 'font-bold text-white' : ''}>
+                            {group.label} ({group.pct.toFixed(1)}%)
+                          </span>
+                        </div>
+                        <span className="font-mono text-white font-semibold">{formatCurrency(group.cents / 100, primaryCurrency)}</span>
                       </div>
-                      <span className="font-mono text-white font-semibold">{formatCurrency(group.cents / 100, primaryCurrency)}</span>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="text-center py-2 text-xs text-slate-400">
                     No account balances allocated yet. Open an account to begin tracking.

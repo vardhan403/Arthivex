@@ -8,13 +8,13 @@ export default function RegisterPage() {
   const { register } = useAuth();
 
   const [simState, setSimState] = useState('default');
-  const [fullname, setFullname] = useState('Jennie Rose');
-  const [email, setEmail] = useState('jennie.rose@vault.arthivex.com');
-  const [password, setPassword] = useState('OnyxVault2026!');
-  const [confirmPassword, setConfirmPassword] = useState('OnyxVault2026!');
+  const [fullname, setFullname] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [termsAgreed, setTermsAgreed] = useState(true);
+  const [termsAgreed, setTermsAgreed] = useState(false);
 
   // Validation & Simulator alerts
   const [statusBanner, setStatusBanner] = useState(null);
@@ -55,8 +55,6 @@ export default function RegisterPage() {
         break;
 
       case 'invalid-email':
-        setFullname('Jennie Rose');
-        setEmail('jennie.rose@invalid-domain');
         setEmailError(true);
         setStatusBanner({
           type: 'error',
@@ -66,10 +64,6 @@ export default function RegisterPage() {
         break;
 
       case 'password-mismatch':
-        setFullname('Jennie Rose');
-        setEmail('jennie.rose@vault.arthivex.com');
-        setPassword('OnyxSecurity2026!');
-        setConfirmPassword('OnyxSecurity2025?');
         setStatusBanner({
           type: 'error',
           title: 'Password Mismatch Alert',
@@ -78,8 +72,6 @@ export default function RegisterPage() {
         break;
 
       case 'weak-pass':
-        setPassword('abc');
-        setConfirmPassword('abc');
         setStatusBanner({
           type: 'warning',
           title: 'Weak Password Notice',
@@ -452,7 +444,7 @@ export default function RegisterPage() {
                       }`}
                       id="fullname"
                       name="fullname"
-                      placeholder="Jennie Rose"
+                      placeholder="Enter your full name"
                       type="text"
                       value={fullname}
                       onChange={(e) => setFullname(e.target.value)}
@@ -481,7 +473,7 @@ export default function RegisterPage() {
                       }`}
                       id="email"
                       name="email"
-                      placeholder="jennie.rose@vault.arthivex.com"
+                      placeholder="Enter your email address"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -510,7 +502,7 @@ export default function RegisterPage() {
                         className="w-full h-12 pl-12 pr-12 rounded-xl bg-[#1a1f2d] text-[#dee2f5] placeholder:text-[#bfc6de]/60 text-xs outline-none focus:bg-[#252a38] border border-transparent focus:border-[#ffb067]/60 transition-colors"
                         id="password"
                         name="password"
-                        placeholder="••••••••••••"
+                        placeholder="Create a password"
                         type={showPass ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -540,7 +532,7 @@ export default function RegisterPage() {
                         className="w-full h-12 pl-12 pr-12 rounded-xl bg-[#1a1f2d] text-[#dee2f5] placeholder:text-[#bfc6de]/60 text-xs outline-none focus:bg-[#252a38] border border-transparent focus:border-[#ffb067]/60 transition-colors"
                         id="confirm-password"
                         name="confirm-password"
-                        placeholder="••••••••••••"
+                        placeholder="Re-enter your password"
                         type={showConfirm ? 'text' : 'password'}
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}

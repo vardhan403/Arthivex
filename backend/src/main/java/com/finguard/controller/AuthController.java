@@ -4,15 +4,18 @@ import com.finguard.dto.AdminBootstrapRequest;
 import com.finguard.dto.AuthResponse;
 import com.finguard.dto.LoginRequest;
 import com.finguard.dto.RegisterRequest;
+import com.finguard.dto.UpdateAvatarRequest;
 import com.finguard.dto.UserResponse;
 import com.finguard.security.UserPrincipal;
 import com.finguard.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Authentication REST Controller.
@@ -63,6 +66,29 @@ public class AuthController {
     public ResponseEntity<UserResponse> getCurrentUser(
             @AuthenticationPrincipal UserPrincipal principal) {
         UserResponse response = authService.getCurrentUser(principal);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/avatar")
+    public ResponseEntity<UserResponse> updateAvatar(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody UpdateAvatarRequest request) {
+        UserResponse response = authService.updateProfilePicture(principal, request.profilePicture());
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping(value = "/avatar/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<UserResponse> uploadAvatar(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam("file") MultipartFile file) {
+        UserResponse response = authService.updateProfilePictureMultipart(principal, file);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/avatar")
+    public ResponseEntity<UserResponse> removeAvatar(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        UserResponse response = authService.removeProfilePicture(principal);
         return ResponseEntity.ok(response);
     }
 

@@ -17,8 +17,13 @@ public record UserResponse(
         Role role,
         OnboardingStatus onboardingStatus,
         boolean enabled,
-        Instant createdAt
+        Instant createdAt,
+        String profilePicture
 ) {
+    public UserResponse(UUID id, String name, String email, Role role, OnboardingStatus onboardingStatus, boolean enabled, Instant createdAt) {
+        this(id, name, email, role, onboardingStatus, enabled, createdAt, null);
+    }
+
     public static UserResponse fromEntity(User user) {
         return new UserResponse(
                 user.getId(),
@@ -27,7 +32,8 @@ public record UserResponse(
                 user.getRole(),
                 user.getOnboardingStatus(),
                 user.isEnabled(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getProfilePicture()
         );
     }
 }

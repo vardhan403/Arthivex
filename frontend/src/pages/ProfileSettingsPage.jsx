@@ -1,14 +1,89 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { authService } from '../services/authService';
 
 export default function ProfileSettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
+
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState(null);
+  const [avatarSuccess, setAvatarSuccess] = useState(null);
 
   const displayName = user?.name || user?.fullName || user?.username || (user?.email ? user.email.split('@')[0] : 'Account Holder');
   const userRole = user?.role ? user.role.replace(/_/g, ' ') : 'Account Holder';
-  const vaultId = user?.id ? `FG-${user.id.slice(0, 8).toUpperCase()}` : 'FG-SESSION';
+  const vaultId = user?.id ? `AX-${user.id.slice(0, 8).toUpperCase()}` : 'AX-SESSION';
+
+  const handleAvatarFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAvatarError(null);
+    setAvatarSuccess(null);
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      setAvatarError('Unsupported image format. Please select a JPEG, PNG, WEBP, or GIF image.');
+      return;
+    }
+
+    const maxBytes = 2 * 1024 * 1024; // 2MB
+    if (file.size > maxBytes) {
+      setAvatarError('Image size exceeds the 2MB limit. Please select a smaller file.');
+      return;
+    }
+
+    setAvatarUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const dataUrl = event.target.result;
+          const updated = await authService.uploadAvatar(dataUrl);
+          if (updateUser) {
+            updateUser({ profilePicture: updated.profilePicture || dataUrl });
+          }
+          setAvatarSuccess('Profile picture updated and securely persisted.');
+        } catch (err) {
+          setAvatarError(err.message || 'Failed to upload profile picture.');
+        } finally {
+          setAvatarUploading(false);
+        }
+      };
+      reader.onerror = () => {
+        setAvatarError('Failed to read image file.');
+        setAvatarUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setAvatarError(err.message || 'Failed to process image file.');
+      setAvatarUploading(false);
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!user?.profilePicture) return;
+    setAvatarUploading(true);
+    setAvatarError(null);
+    setAvatarSuccess(null);
+    try {
+      await authService.deleteAvatar();
+      if (updateUser) {
+        updateUser({ profilePicture: null });
+      }
+      setAvatarSuccess('Profile picture removed successfully.');
+    } catch (err) {
+      setAvatarError(err.message || 'Failed to remove profile picture.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'security' | 'rails' | 'audit'
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
@@ -128,18 +203,59 @@ export default function ProfileSettingsPage() {
         <div className="xl:col-span-8 flex flex-col gap-6">
           {/* User Profile Card */}
           <div className="bg-[#161b29] rounded-xl p-6 sm:p-8 border border-[#283046] shadow-sm flex flex-col gap-6">
+            {/* Feedback Alerts */}
+            {avatarError && (
+              <div className="flex items-center justify-between p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-red-300 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-red-400">error</span>
+                  <span>{avatarError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAvatarError(null)}
+                  className="text-red-400 hover:text-white"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+            )}
+
+            {avatarSuccess && (
+              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-emerald-400">check_circle</span>
+                  <span>{avatarSuccess}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAvatarSuccess(null)}
+                  className="text-emerald-400 hover:text-white"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+            )}
+
+            {/* Profile Header & Picture Section */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 bg-[#1a1f2d]/60 p-4 rounded-xl border border-[#283046]/60">
               <div className="flex items-center gap-4">
-                <div className="relative">
-                  <img
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCp0RcW2D3UOgv7d5-rnF-d4tXEdSaUTMphaNlCcLsHDl9kS4aJCVd25nhsaAQkPKqcguxFzdTIoNJexPM1Ohn9fHr4gL-Lqi6DK-hzE8b3pZNTnwAtbyTqB5lsDhvkdkQrH4SLwNXyWDr6JW9ER3d1HnfPAENuHp-pKrkoXbFev6Hn6FaiNW-K4QdpRofPCeZ_ZXSf-DVGPbTNsV0PtJEOVTlAJNVALeh8cV2tXI1A"
-                    alt="User Profile"
-                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover shadow-sm ring-2 ring-[#ffb067]/40"
-                  />
+                <div className="relative group">
+                  {user?.profilePicture ? (
+                    <img
+                      src={user.profilePicture}
+                      alt={displayName}
+                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover shadow-sm ring-2 ring-[#ffb067]/40"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#ffb067]/20 border-2 border-[#ffb067]/40 flex items-center justify-center text-[#ffb067] font-bold text-2xl sm:text-3xl shadow-sm">
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <div className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-[#161b29] flex items-center justify-center">
-                    <span className="w-3.5 h-3.5 rounded-full bg-emerald-400"></span>
+                    <span className="w-3.5 h-3.5 rounded-full bg-emerald-400" title="Active Verified Session"></span>
                   </div>
                 </div>
+
                 <div className="flex flex-col">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xl font-bold text-[#dee2f5]">{displayName}</span>
@@ -157,11 +273,41 @@ export default function ProfileSettingsPage() {
                 </div>
               </div>
 
-              <div className="flex sm:flex-col items-center sm:items-end gap-1.5 self-stretch sm:self-auto justify-between">
-                <span className="text-[11px] uppercase tracking-wider text-[#bfc6de] font-semibold">Attestation Status</span>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-400 font-semibold text-xs border border-emerald-500/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  VERIFIED
+              {/* Picture Action Buttons */}
+              <div className="flex flex-row sm:flex-col items-start sm:items-end gap-2 self-stretch sm:self-auto justify-between">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleAvatarFileSelect}
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  disabled={avatarUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#161b29] hover:bg-[#1f2638] border border-[#283046] hover:border-[#ffb067]/50 text-xs font-semibold text-[#dee2f5] transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-[#ffb067]">
+                    {avatarUploading ? 'sync' : 'photo_camera'}
+                  </span>
+                  <span>{avatarUploading ? 'Uploading...' : user?.profilePicture ? 'Change Picture' : 'Upload Picture'}</span>
+                </button>
+
+                {user?.profilePicture && (
+                  <button
+                    type="button"
+                    disabled={avatarUploading}
+                    onClick={handleRemoveAvatar}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-red-400 hover:text-red-300 hover:bg-red-950/40 border border-transparent hover:border-red-500/20 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">delete</span>
+                    <span>Remove</span>
+                  </button>
+                )}
+
+                <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
+                  Max 2MB (JPEG, PNG, WEBP, GIF)
                 </span>
               </div>
             </div>
@@ -171,7 +317,7 @@ export default function ProfileSettingsPage() {
               <div className="flex flex-col gap-1.5 p-4 bg-[#1a1f2d] border border-[#283046] rounded-xl">
                 <span className="text-[11px] uppercase tracking-wider text-[#bfc6de] font-semibold">Corporate Email</span>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-[#dee2f5] font-mono font-semibold">m.vance@arthivex-treasury.io</span>
+                  <span className="text-sm text-[#dee2f5] font-mono font-semibold truncate">{user?.email || 'authenticated.holder@arthivex.io'}</span>
                   <span className="material-symbols-outlined text-[18px] text-[#ffb067]">mark_email_read</span>
                 </div>
                 <span className="text-xs text-[#bfc6de]/80 mt-1">Bound to Arthivex Enterprise Identity Provider</span>
@@ -183,7 +329,7 @@ export default function ProfileSettingsPage() {
                   <span className="text-sm text-[#dee2f5] font-semibold">Arthivex Custodial Holdings LLC</span>
                   <span className="material-symbols-outlined text-[18px] text-[#bfc6de]">domain</span>
                 </div>
-                <span className="text-xs text-[#bfc6de]/80 mt-1 font-mono">Workstation ID: VLT-NODE-04</span>
+                <span className="text-xs text-[#bfc6de]/80 mt-1 font-mono">Workstation Node: AX-NODE-01</span>
               </div>
             </div>
 

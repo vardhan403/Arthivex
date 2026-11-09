@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { transactionService } from '../services/transactionService';
 import { accountService } from '../services/accountService';
 import { formatCurrency, getCurrencySymbol } from '../utils/currencyFormatter';
+import { exportTransactionsCsv } from '../utils/csvGenerator';
+import { generateTransactionStatementPdf } from '../utils/pdfGenerator';
 
 export default function TransactionHistoryPage() {
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   // Filter and search state
@@ -109,60 +113,25 @@ export default function TransactionHistoryPage() {
       alert('No transaction records available to export.');
       return;
     }
-    const headers = ['Transaction ID', 'Reference', 'Date', 'Time', 'Flow', 'Account', 'Counterparty', 'Description', 'Status', 'Amount', 'Currency'];
-    const rowsCsv = filteredRows.map((r) => [
-      `"${r.id}"`,
-      `"${r.reference || ''}"`,
-      `"${r.date}"`,
-      `"${r.time}"`,
-      `"${r.flow}"`,
-      `"${r.accountName} (${r.accountNum})"`,
-      `"${(r.counterparty || '').replace(/"/g, '""')}"`,
-      `"${(r.memo || '').replace(/"/g, '""')}"`,
-      `"${r.status}"`,
-      `"${r.amount}"`,
-      `"${r.currency}"`
-    ]);
-    const csvContent = [headers.join(','), ...rowsCsv.map(row => row.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `arthivex_transactions_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    exportTransactionsCsv(filteredRows, {
+      filename: `arthivex_transactions_${new Date().toISOString().slice(0, 10)}.csv`,
+      currency: filteredRows[0]?.currencyCode || 'INR'
+    });
   };
 
-  // Certified Audit Manifest Exporter
-  const handleExportAuditManifest = () => {
+  // Certified PDF Statement Exporter
+  const handleExportPdf = () => {
     if (filteredRows.length === 0) {
-      alert('No transactions recorded to certify.');
+      alert('No transaction records available to export.');
       return;
     }
-    const manifest = {
-      auditTimestamp: new Date().toISOString(),
-      standard: 'SOX-404 Cryptographic Double-Entry Ledger',
-      totalRecords: filteredRows.length,
-      records: filteredRows.map(r => ({
-        id: r.id,
-        hash: r.hash,
-        type: r.rawType,
-        amount: r.amountNum,
-        status: r.status,
-        timestamp: r.rawDate.toISOString()
-      }))
-    };
-    const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `arthivex_audit_manifest_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const dateRangeLabel = filterDate === 'all' ? 'All Time' : filterDate === '30d' ? 'Last 30 Days' : 'Last 7 Days';
+    generateTransactionStatementPdf({
+      user,
+      transactions: filteredRows,
+      dateRange: dateRangeLabel,
+      currency: filteredRows[0]?.currencyCode || 'INR'
+    });
   };
 
   // 1. 30-Day Volume Calculation
@@ -255,11 +224,11 @@ export default function TransactionHistoryPage() {
           </button>
           <button
             type="button"
-            onClick={handleExportAuditManifest}
+            onClick={handleExportPdf}
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#ffb067] text-[#4c2700] hover:bg-[#ffdcc1] text-xs font-bold transition-colors shadow-sm shadow-[#ffb067]/20 cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[18px]">verified</span>
-            <span>Export Certified Manifest</span>
+            <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+            <span>Export Certified PDF</span>
           </button>
         </div>
       </div>

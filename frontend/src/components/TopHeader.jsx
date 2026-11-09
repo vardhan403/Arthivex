@@ -179,8 +179,12 @@ export default function TopHeader({ setMobileOpen, collapsed, setCollapsed, page
             className="flex items-center gap-2 sm:gap-2.5 pl-2 py-1 border-l border-[#283046] hover:bg-[#161b29]/50 rounded-lg transition-colors focus:outline-none cursor-pointer"
             type="button"
           >
-            <div className="w-8 h-8 rounded-full bg-[#ffb067]/20 border border-[#ffb067]/40 flex items-center justify-center text-[#ffb067] font-bold text-xs shrink-0">
-              {displayName.charAt(0).toUpperCase()}
+            <div className="w-8 h-8 rounded-full bg-[#ffb067]/20 border border-[#ffb067]/40 flex items-center justify-center text-[#ffb067] font-bold text-xs shrink-0 overflow-hidden">
+              {user?.profilePicture ? (
+                <img src={user.profilePicture} alt={displayName} className="w-full h-full object-cover" />
+              ) : (
+                displayName.charAt(0).toUpperCase()
+              )}
             </div>
             <div className="hidden md:flex flex-col text-left">
               <span className="text-[13px] leading-tight text-white font-medium whitespace-nowrap">

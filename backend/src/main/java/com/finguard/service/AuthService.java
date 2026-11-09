@@ -258,4 +258,91 @@ public class AuthService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + principal.getId()));
         return UserResponse.fromEntity(user);
     }
+
+    @Transactional
+    public UserResponse updateProfilePicture(UserPrincipal principal, String profilePictureData) {
+        if (principal == null) {
+            throw new InvalidCredentialsException("Authentication required.");
+        }
+        if (profilePictureData == null || profilePictureData.isBlank()) {
+            throw new IllegalArgumentException("Profile picture payload cannot be empty.");
+        }
+
+        String trimmed = profilePictureData.trim();
+        boolean isDataUrl = trimmed.startsWith("data:image/jpeg;base64,")
+                || trimmed.startsWith("data:image/jpg;base64,")
+                || trimmed.startsWith("data:image/png;base64,")
+                || trimmed.startsWith("data:image/webp;base64,")
+                || trimmed.startsWith("data:image/gif;base64,");
+        boolean isHttpUrl = trimmed.startsWith("http://") || trimmed.startsWith("https://");
+
+        if (!isDataUrl && !isHttpUrl) {
+            throw new IllegalArgumentException("Unsupported image format. Allowed formats: JPEG, PNG, WEBP, GIF.");
+        }
+
+        // Limit data URL length to ~3.5MB (approx 2.5MB image)
+        if (trimmed.length() > 3_500_000) {
+            throw new IllegalArgumentException("Image file size exceeds maximum allowed limit of 2MB.");
+        }
+
+        User user = userRepository.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + principal.getId()));
+
+        user.setProfilePicture(trimmed);
+        userRepository.save(user);
+
+        auditService.recordEvent(user.getId(), user.getEmail(), "AVATAR_UPDATED", "USER", user.getId().toString(),
+                UUID.randomUUID().toString(), "User updated profile picture", "SUCCESS");
+
+        return UserResponse.fromEntity(user);
+    }
+
+    @Transactional
+    public UserResponse updateProfilePictureMultipart(UserPrincipal principal, org.springframework.web.multipart.MultipartFile file) {
+        if (principal == null) {
+            throw new InvalidCredentialsException("Authentication required.");
+        }
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("File cannot be empty.");
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !(contentType.equalsIgnoreCase("image/jpeg")
+                || contentType.equalsIgnoreCase("image/jpg")
+                || contentType.equalsIgnoreCase("image/png")
+                || contentType.equalsIgnoreCase("image/webp")
+                || contentType.equalsIgnoreCase("image/gif"))) {
+            throw new IllegalArgumentException("Unsupported image format. Allowed formats: JPEG, PNG, WEBP, GIF.");
+        }
+
+        if (file.getSize() > 2 * 1024 * 1024) {
+            throw new IllegalArgumentException("Image file size exceeds maximum allowed limit of 2MB.");
+        }
+
+        try {
+            byte[] bytes = file.getBytes();
+            String base64 = java.util.Base64.getEncoder().encodeToString(bytes);
+            String dataUrl = "data:" + contentType.toLowerCase() + ";base64," + base64;
+            return updateProfilePicture(principal, dataUrl);
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("Failed to read image file data.");
+        }
+    }
+
+    @Transactional
+    public UserResponse removeProfilePicture(UserPrincipal principal) {
+        if (principal == null) {
+            throw new InvalidCredentialsException("Authentication required.");
+        }
+        User user = userRepository.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + principal.getId()));
+
+        user.setProfilePicture(null);
+        userRepository.save(user);
+
+        auditService.recordEvent(user.getId(), user.getEmail(), "AVATAR_REMOVED", "USER", user.getId().toString(),
+                UUID.randomUUID().toString(), "User removed profile picture", "SUCCESS");
+
+        return UserResponse.fromEntity(user);
+    }
 }
