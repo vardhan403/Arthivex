@@ -1,0 +1,24 @@
+# Compiled class files
+target/
+*.class
+
+# Log files
+*.log
+
+# Environment variables & secrets (MUST NEVER BE COMMITTED TO GIT)
+.env
+.env.*
+!.env.example
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS files
+.DS_Store
+Thumbs.db
+

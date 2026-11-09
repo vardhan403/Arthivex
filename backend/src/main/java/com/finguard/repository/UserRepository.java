@@ -1,0 +1,28 @@
+package com.finguard.repository;
+
+import com.finguard.entity.OnboardingStatus;
+import com.finguard.entity.Role;
+import com.finguard.entity.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificationExecutor<User> {
+
+    Optional<User> findByEmail(String email);
+
+    boolean existsByEmail(String email);
+
+    long countByRoleAndEnabledTrue(Role role);
+
+    List<User> findByOnboardingStatus(OnboardingStatus status);
+
+    Page<User> findByOnboardingStatus(OnboardingStatus status, Pageable pageable);
+}
